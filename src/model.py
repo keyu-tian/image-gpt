@@ -1,6 +1,20 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib.training import HParams
+
+from typing import NamedTuple
+
+
+class HParams(NamedTuple):
+    n_embd: int = 512
+    n_head: int = 8
+    n_layer: int = 24
+    n_px: int = 32          # image height or width in pixels
+    n_ctx: int = 32 * 32
+    n_vocab: int = 512      # possible values for each pixel
+    bert: bool = False      # use the bert objective (defaut: autoregressive)
+    bert_mask_prob: float = 0.15
+    clf: bool = False       # add a learnable classification head
+
 
 def default_hparams():
     return HParams(
@@ -66,7 +80,7 @@ def attention_mask(nd, ns, *, dtype):
     return tf.cast(m, dtype)
 
 
-def attn(x, scope, n_state, *, past, hparams):
+def attn(x, scope, n_state, *, past, hparams: HParams):
     assert x.shape.ndims == 3  # Should be [batch, sequence, features]
     assert n_state % hparams.n_head == 0
     if past is not None:
@@ -120,7 +134,7 @@ def attn(x, scope, n_state, *, past, hparams):
         return a, present
 
 
-def mlp(x, scope, n_state, *, hparams):
+def mlp(x, scope, n_state, *, hparams: HParams):
     with tf.variable_scope(scope):
         nx = x.shape[-1].value
         h = gelu2(conv1d(x, 'c_fc', n_state))
@@ -128,7 +142,7 @@ def mlp(x, scope, n_state, *, hparams):
         return h2
 
 
-def block(x, scope, *, past, hparams):
+def block(x, scope, *, past, hparams: HParams):
     with tf.variable_scope(scope):
         nx = x.shape[-1].value
         a, present = attn(norm(x, 'ln_1'), 'attn', nx, past=past, hparams=hparams)
@@ -152,7 +166,7 @@ def positions_for(tokens, past_length):
     return expand_tile(past_length + tf.range(nsteps), batch_size)
 
 
-def model(hparams, X, Y=None, past=None, scope='model', reuse=False):
+def model(hparams: HParams, X, Y=None, past=None, scope='model', reuse=False):
     with tf.variable_scope(scope, reuse=reuse):
         results = {}
         batch, sequence = shape_list(X)
